@@ -15,8 +15,9 @@ if __name__ == '__main__':
     # The 'num_gifs' argument is the no. of GIFs to create
     parser.add_argument('--dest', type=str, dest='dest', default='movingmnistdata')
     parser.add_argument('--num_digits', type=int, dest='num_digits', default=1)
-    parser.add_argument('--motion', type=str, dest='motion', default='simple')
+    # parser.add_argument('--motion', type=str, dest='motion', default='simple')
     parser.add_argument('--num_gifs', type=int, dest='num_gifs', default=1)
+    parser.add_argument('--motion', nargs='+', required=True)
     args = vars(parser.parse_args(sys.argv[1:]))
 
     dest = args['dest']

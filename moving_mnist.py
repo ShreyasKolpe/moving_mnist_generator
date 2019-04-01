@@ -106,7 +106,7 @@ def get_image_from_array_with_label(X, Y, index, label, mean=0, std=1):
         ret = ret.reshape(h, w)
     return ret
 
-def generate_moving_mnist(digits, directions, shape=(64, 64), num_frames=30, num_sequences=1, original_size=28):
+def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_sequences=1, original_size=28):
     '''
 
     Args:
@@ -130,20 +130,43 @@ def generate_moving_mnist(digits, directions, shape=(64, 64), num_frames=30, num
     # Eg : 3000000 x 1 x 64 x 64
     dataset = np.empty((num_frames * num_sequences, 1, width, height), dtype=np.uint8)
 
-    # directions = list(np.random.randint(low=0, high=2, size=len(digits)))
 
     for img_idx in range(num_sequences):
         # Randomly generate direction, speed and velocity for both images
-        direcs = [(np.pi * direction)/2 for direction in directions] #np.pi * (np.random.rand(len(digits)) * 2 - 1)
-        speeds = np.random.randint(5, size=len(digits)) + 2
-        veloc = np.asarray([(speed * math.cos(direc), speed * math.sin(direc)) for direc, speed in zip(direcs, speeds)])
-        # Get a list containing as many PIL images as items in digits, randomly sampled from the database
+        # motions = list(np.random.randint(low=0, high=len(digits), size=len(digits)))
+
+        linear_motion = {}
+        circular_motion = {}
+        positions = [[] for _ in digits]
+        for i in range(len(digits)):
+            if motions[i] in ["vertical", "horizontal"]:
+                speed = np.random.randint(5) + 2
+                theta = 0
+                if motions[i] == "vertical":
+                    theta = np.pi/2
+                linear_motion[i] = {
+                    "veloc": [speed*math.cos(theta), speed*math.sin(theta)]
+                }
+                positions[i].append(np.random.rand() * x_lim)
+                positions[i].append(np.random.rand() * y_lim)
+            elif motions[i] in ["circular_clockwise", "circular_anticlockwise"]:
+                r = np.random.randint(0, x_lim//2)
+                theta = np.pi * np.random.randn()/2
+                angular_velocity = np.random.rand()
+                if motions[i] == "circular_clockwise":
+                    angular_velocity*=-1
+                circular_motion[i] = {
+                    "r": r,
+                    "theta": theta,
+                    "angular_velocity": angular_velocity
+                }
+                positions[i].append(width//2 + r*math.cos(theta) - original_size//2)
+                positions[i].append(height//2 - r*math.sin(theta) - original_size//2)
+
         images = []
         for digit in digits:
             rand_num = np.random.randint(0, int(0.9*mnist_imgs.shape[0]))
             images.append(Image.fromarray(get_image_from_array_with_label(mnist_imgs, mnist_labels, rand_num, digit)))
-        # Generate tuples of (x,y) i.e initial positions for nums_per_image (default : 2)
-        positions = np.asarray([(np.random.rand() * x_lim, np.random.rand() * y_lim) for _ in range(len(digits))])
 
         # Generate new frames for the entire num_frames
         for frame_idx in range(num_frames):
@@ -154,48 +177,54 @@ def generate_moving_mnist(digits, directions, shape=(64, 64), num_frames=30, num
             # In canv (i.e Image object) place the image at the respective positions
             # Super impose both images on the canvas (i.e empty np array)
             for i, canv in enumerate(canvases):
-                canv.paste(images[i], tuple(positions[i].astype(int)))
+                canv.paste(images[i], (int(positions[i][0]), int(positions[i][1])))
                 canvas += arr_from_img(canv, mean=0)
 
-            # Get the next position by adding velocity
-            next_pos = positions + veloc
+            for i in range(len(digits)):
+                if motions[i] in ["vertical", "horizontal"]:
+                    for j in range(2):
+                        new_pos = positions[i][j] + linear_motion[i]["veloc"][j]
+                        if new_pos < -2 or new_pos > lims[j] + 2:
+                            linear_motion[i]["veloc"][j]*=-1
+                        positions[i][j] += linear_motion[i]["veloc"][j]
+                elif motions[i] in ["circular_clockwise", "circular_anticlockwise"]:
+                    circular_motion[i]["theta"] += circular_motion[i]["angular_velocity"]
+                    r = circular_motion[i]["r"]
+                    theta = circular_motion[i]["theta"]
+                    positions[i][0] = width//2 + r*math.cos(theta) - original_size//2
+                    positions[i][1] = height//2 - r*math.sin(theta) - original_size//2
 
-            # Iterate over velocity and see if we hit the wall
-            # If we do then change the  (change direction)
-            for i, pos in enumerate(next_pos):
-                for j, coord in enumerate(pos):
-                    if coord < -2 or coord > lims[j] + 2:
-                        veloc[i] = list(list(veloc[i][:j]) + [-1 * veloc[i][j]] + list(veloc[i][j + 1:]))
-
-            # Make the permanent change to position by adding updated velocity
-            positions = positions + veloc
 
             # Add the canvas to the dataset array
             dataset[img_idx * num_frames + frame_idx] = (canvas * 255).clip(0, 255).astype(np.uint8)
 
     return dataset
 
-def tack_on(digit, direction, caption):
+def tack_on(digit, motion, caption):
     caption += ' digit {} is moving'.format(digit)
-    if direction == 1:
+    if motion == "vertical":
         caption += ' up and down'
-    else:
+    elif motion == "horizontal":
         caption += ' left and right'
+    elif motion == "circular_clockwise":
+        caption += ' clockwise in a circle'
+    elif motion == "circular_anticlockwise":
+        caption += ' anti-clockwise in a circle'
     return caption
 
-def main(digits, directions, dest, frame_size=64, num_frames=30, num_sequences=1, original_size=28):
+def main(digits, motions, dest, frame_size=64, num_frames=30, num_sequences=1, original_size=28):
 
     assert len(digits) > 0, "Need at least one digit"
 
 
     dat = generate_moving_mnist(shape=(frame_size, frame_size), num_frames=num_frames, num_sequences=num_sequences,
-                                digits=digits, directions=directions, original_size=original_size)
+                                digits=digits, motions=motions, original_size=original_size)
 
-    caption = tack_on(digits[0], directions[0], 'The')
+    caption = tack_on(digits[0], motions[0], 'The')
     if len(digits) > 1:
         for i in range(1, len(digits)):
             caption += ' and the'
-            caption = tack_on(digits[i], directions[i], caption)
+            caption = tack_on(digits[i], motions[i], caption)
     caption += '.'
 
     fcount = len(os.listdir(dest))
@@ -218,7 +247,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Command line options')
     # The 'dest' argument is the directory in which to store the generated GIFs
     # The 'num_gifs' argument is the no. of GIFs to create
-    parser.add_argument('--dest', type=str, dest='dest', default='movingmnistdata')
+    parser.add_argument('--dest', type=str, dest='dest', default='movingmnist')
     parser.add_argument('--num_gifs', type=int, dest='num_gifs', default=1)  # number of sequences to generate
     args = vars(parser.parse_args(sys.argv[1:]))
 
@@ -232,8 +261,10 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(dest, 'captions.txt')):
         open(os.path.join(dest, 'captions.txt'), 'x')
 
-    # As an example, create some GIFs of the digit 7 moving left to right
-    digits = [1, 6]  # create GIF of digit 7
-    directions = [1, 0]  # 0 -> moving left and right, 1 -> moving up and down
+    allowed_motions = ["vertical", "horizontal", "circular_clockwise", "circular_anticlockwise"]
 
-    main(digits, directions, dest, num_sequences=num_sequences)
+
+    digits = [1, 6]
+    motions = ["vertical", "circular_anticlockwise"]
+
+    main(digits, motions, dest, num_sequences=num_sequences)
