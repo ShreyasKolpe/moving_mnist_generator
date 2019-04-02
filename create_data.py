@@ -22,36 +22,36 @@ if __name__ == '__main__':
 
     dest = args['dest']
     num_digits = args['num_digits']
-    motion = args['motion']
+    desired_motions = args['motion']
     num_gifs = args['num_gifs']
 
     numbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    allowed_motions = ["vertical", "horizontal", "circular_clockwise", "circular_anticlockwise", "zigzag", "tofro"]
 
-    if motion == 'simple':
-        # Create directory and the captions file
-        if not os.path.exists(dest):
-            os.makedirs(dest)
+    # Create directory and the captions file
+    if not os.path.exists(dest):
+        os.makedirs(dest)
 
-        if not os.path.exists(os.path.join(dest, 'captions.txt')):
-            open(os.path.join(dest, 'captions.txt'), 'x')
+    if not os.path.exists(os.path.join(dest, 'captions.txt')):
+        open(os.path.join(dest, 'captions.txt'), 'x')
 
-        num_combinations = math.factorial(10) // math.factorial(num_digits) // math.factorial(10 - num_digits)
+    num_combinations = math.factorial(10) // math.factorial(num_digits) // math.factorial(10 - num_digits)
 
-        if num_gifs < 2*num_combinations:
-            for i in range(num_gifs):
-                digits = list(np.random.randint(low=0, high=10, size=num_digits))
-                directions = list(np.random.randint(low=0, high=2, size=num_digits))
-                mnist.main(digits=digits, directions=directions, dest=dest)
+    if num_gifs < 2*num_combinations:
+        for i in range(num_gifs):
+            digits = list(np.random.randint(low=0, high=10, size=num_digits))
+            motions = [desired_motions[np.random.randint(len(desired_motions))] for _ in digits]
+            mnist.main(digits=digits, motions=motions, dest=dest)
 
-        else:
-            batch_size = num_gifs // num_combinations
+    else:
+        batch_size = num_gifs // num_combinations
 
-            for combination in itertools.combinations(numbers, num_digits):
-                for i in range(batch_size):
-                    directions = list(np.random.randint(low=0, high=2, size=num_digits))
-                    mnist.main(digits=combination, directions=directions, dest=dest)
+        for combination in itertools.combinations(numbers, num_digits):
+            for i in range(batch_size):
+                motions = [desired_motions[np.random.randint(len(desired_motions))] for _ in digits]
+                mnist.main(digits=combination, motions=motions, dest=dest)
 
-            for i in range(num_gifs - (batch_size*num_combinations)):
-                digits = list(np.random.randint(low=0, high=10, size=num_digits))
-                directions = list(np.random.randint(low=0, high=2, size=num_digits))
-                mnist.main(digits=digits, directions=directions, dest=dest)
+        for i in range(num_gifs - (batch_size*num_combinations)):
+            digits = list(np.random.randint(low=0, high=10, size=num_digits))
+            motions = [desired_motions[np.random.randint(len(desired_motions))] for _ in digits]
+            mnist.main(digits=digits, motions=motions, dest=dest)

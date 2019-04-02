@@ -135,16 +135,18 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
         # Randomly generate direction, speed and velocity for both images
         # motions = list(np.random.randint(low=0, high=len(digits), size=len(digits)))
 
-        linear_motion = {}
-        circular_motion = {}
+        motion_dict = {}
+        # circular_motion = {}
         positions = [[] for _ in digits]
         for i in range(len(digits)):
-            if motions[i] in ["vertical", "horizontal"]:
+            if motions[i] in ["vertical", "horizontal", "zigzag"]:
                 speed = np.random.randint(5) + 2
                 theta = 0
                 if motions[i] == "vertical":
                     theta = np.pi/2
-                linear_motion[i] = {
+                elif motions[i] == "zigzag":
+                    theta = np.pi*np.random.randn()/2
+                motion_dict[i] = {
                     "veloc": [speed*math.cos(theta), speed*math.sin(theta)]
                 }
                 positions[i].append(np.random.rand() * x_lim)
@@ -155,13 +157,23 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
                 angular_velocity = np.random.rand()
                 if motions[i] == "circular_clockwise":
                     angular_velocity*=-1
-                circular_motion[i] = {
+                motion_dict[i] = {
                     "r": r,
                     "theta": theta,
                     "angular_velocity": angular_velocity
                 }
                 positions[i].append(width//2 + r*math.cos(theta) - original_size//2)
                 positions[i].append(height//2 - r*math.sin(theta) - original_size//2)
+            elif motions[i] == "tofro":
+                motion_dict[i] = {
+                    "center_x": width//2,# + np.random.randn()*x_lim/4,
+                    "center_y": height/2,# + np.random.randn()*y_lim/4,
+                    "size": original_size,
+                    "waxing": True,
+                    "size_step": np.random.randint(5)
+                }
+                positions[i].append(motion_dict[i]["center_x"] - motion_dict[i]["size"]//2)
+                positions[i].append(motion_dict[i]["center_y"] - motion_dict[i]["size"]//2)
 
         images = []
         for digit in digits:
@@ -177,23 +189,37 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
             # In canv (i.e Image object) place the image at the respective positions
             # Super impose both images on the canvas (i.e empty np array)
             for i, canv in enumerate(canvases):
-                canv.paste(images[i], (int(positions[i][0]), int(positions[i][1])))
+                if motions[i] == "tofro":
+                    canv.paste(images[i].resize((motion_dict[i]["size"], motion_dict[i]["size"])),
+                               (int(positions[i][0]), int(positions[i][1])))
+                else:
+                    canv.paste(images[i], (int(positions[i][0]), int(positions[i][1])))
                 canvas += arr_from_img(canv, mean=0)
 
             for i in range(len(digits)):
-                if motions[i] in ["vertical", "horizontal"]:
+                if motions[i] in ["vertical", "horizontal", "zigzag"]:
                     for j in range(2):
-                        new_pos = positions[i][j] + linear_motion[i]["veloc"][j]
+                        new_pos = positions[i][j] + motion_dict[i]["veloc"][j]
                         if new_pos < -2 or new_pos > lims[j] + 2:
-                            linear_motion[i]["veloc"][j]*=-1
-                        positions[i][j] += linear_motion[i]["veloc"][j]
+                            motion_dict[i]["veloc"][j]*=-1
+                        positions[i][j] += motion_dict[i]["veloc"][j]
                 elif motions[i] in ["circular_clockwise", "circular_anticlockwise"]:
-                    circular_motion[i]["theta"] += circular_motion[i]["angular_velocity"]
-                    r = circular_motion[i]["r"]
-                    theta = circular_motion[i]["theta"]
+                    motion_dict[i]["theta"] += motion_dict[i]["angular_velocity"]
+                    r = motion_dict[i]["r"]
+                    theta = motion_dict[i]["theta"]
                     positions[i][0] = width//2 + r*math.cos(theta) - original_size//2
                     positions[i][1] = height//2 - r*math.sin(theta) - original_size//2
-
+                elif motions[i] == "tofro":
+                    if motion_dict[i]["waxing"]:
+                        motion_dict[i]["size"]+=motion_dict[i]["size_step"]
+                        newX = motion_dict[i]["center_x"] - motion_dict[i]["size"]//2
+                        newY = motion_dict[i]["center_y"] - motion_dict[i]["size"]//2
+                        if newX < -2 or newX > (width - motion_dict[i]["size"]) + 2 or newY < -2 or newY > (height - motion_dict[i]["size"]) + 2:
+                            motion_dict[i]["waxing"] = False
+                    else:
+                        motion_dict[i]["size"]-=motion_dict[i]["size_step"]
+                        if motion_dict[i]["size"] == original_size:
+                            motion_dict[i]["waxing"] = True
 
             # Add the canvas to the dataset array
             dataset[img_idx * num_frames + frame_idx] = (canvas * 255).clip(0, 255).astype(np.uint8)
@@ -210,6 +236,10 @@ def tack_on(digit, motion, caption):
         caption += ' clockwise in a circle'
     elif motion == "circular_anticlockwise":
         caption += ' anti-clockwise in a circle'
+    elif motion == "zigzag":
+        caption += ' in a zigzag path'
+    elif motion == "tofro":
+        caption += ' to and fro'
     return caption
 
 def main(digits, motions, dest, frame_size=64, num_frames=30, num_sequences=1, original_size=28):
@@ -261,10 +291,10 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(dest, 'captions.txt')):
         open(os.path.join(dest, 'captions.txt'), 'x')
 
-    allowed_motions = ["vertical", "horizontal", "circular_clockwise", "circular_anticlockwise"]
+    allowed_motions = ["vertical", "horizontal", "circular_clockwise", "circular_anticlockwise", "zigzag", "tofro"]
 
 
-    digits = [1, 6]
-    motions = ["vertical", "circular_anticlockwise"]
+    digits = [0]
+    motions = ["tofro"]
 
     main(digits, motions, dest, num_sequences=num_sequences)
