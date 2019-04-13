@@ -1,6 +1,7 @@
 import math
 import os
 import sys
+import pickle
 
 import numpy as np
 from PIL import Image
@@ -129,7 +130,7 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
     # Create a dataset of shape of num_frames * num_images x 1 x new_width x new_height
     # Eg : 3000000 x 1 x 64 x 64
     dataset = np.empty((num_frames * num_sequences, 1, width, height), dtype=np.uint8)
-
+    action_vectors = np.empty((num_sequences, num_frames, 4), dtype=np.float)
 
     for img_idx in range(num_sequences):
         # Randomly generate direction, speed and velocity for both images
@@ -192,8 +193,18 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
                 if motions[i] == "tofro":
                     canv.paste(images[i].resize((motion_dict[i]["size"], motion_dict[i]["size"])),
                                (int(positions[i][0]), int(positions[i][1])))
-                else:
+                elif motions[i] == "vertical":
                     canv.paste(images[i], (int(positions[i][0]), int(positions[i][1])))
+                    if motion_dict[i]["veloc"][1] >= 0:
+                        action_vectors[img_idx][frame_idx][1] = 1
+                    elif motion_dict[i]["veloc"][1] < 0:
+                        action_vectors[img_idx][frame_idx][0] = 1
+                elif motions[i] == "horizontal":
+                    canv.paste(images[i], (int(positions[i][0]), int(positions[i][1])))
+                    if motion_dict[i]["veloc"][0] >= 0:
+                        action_vectors[img_idx][frame_idx][3] = 1
+                    elif motion_dict[i]["veloc"][0] < 0:
+                        action_vectors[img_idx][frame_idx][2] = 1
                 canvas += arr_from_img(canv, mean=0)
 
             for i in range(len(digits)):
@@ -224,7 +235,7 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
             # Add the canvas to the dataset array
             dataset[img_idx * num_frames + frame_idx] = (canvas * 255).clip(0, 255).astype(np.uint8)
 
-    return dataset
+    return dataset, action_vectors
 
 def tack_on(digit, motion, caption):
     caption += ' digit {} is moving'.format(digit)
@@ -247,7 +258,7 @@ def main(digits, motions, dest, frame_size=64, num_frames=30, num_sequences=1, o
     assert len(digits) > 0, "Need at least one digit"
 
 
-    dat = generate_moving_mnist(shape=(frame_size, frame_size), num_frames=num_frames, num_sequences=num_sequences,
+    dat, action_vectors = generate_moving_mnist(shape=(frame_size, frame_size), num_frames=num_frames, num_sequences=num_sequences,
                                 digits=digits, motions=motions, original_size=original_size)
 
     caption = tack_on(digits[0], motions[0], 'The')
@@ -267,7 +278,8 @@ def main(digits, motions, dest, frame_size=64, num_frames=30, num_sequences=1, o
         for j in range(num_frames):
             Image.fromarray(get_image_from_array(dat, i*num_frames+j, mean=0)).save(os.path.join(image_dir, '{}.jpg'.format(j)))
         f.write('{},{}\n'.format(image_dir, caption))
-
+        with open(os.path.join(image_dir, 'actions.pkl'.format(i)), 'wb') as action_f:
+            pickle.dump(action_vectors[i], action_f)
     f.close()
 
 
@@ -295,6 +307,6 @@ if __name__ == '__main__':
 
 
     digits = [0]
-    motions = ["tofro"]
+    motions = ["vertical", "horizontal"]
 
     main(digits, motions, dest, num_sequences=num_sequences)
