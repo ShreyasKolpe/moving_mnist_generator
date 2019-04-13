@@ -130,7 +130,7 @@ def generate_moving_mnist(digits, motions, shape=(64, 64), num_frames=30, num_se
     # Create a dataset of shape of num_frames * num_images x 1 x new_width x new_height
     # Eg : 3000000 x 1 x 64 x 64
     dataset = np.empty((num_frames * num_sequences, 1, width, height), dtype=np.uint8)
-    action_vectors = np.empty((num_sequences, num_frames, 4), dtype=np.float)
+    action_vectors = np.zeros((num_sequences, num_frames, 4), dtype=np.float)
 
     for img_idx in range(num_sequences):
         # Randomly generate direction, speed and velocity for both images
